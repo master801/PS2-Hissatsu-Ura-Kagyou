@@ -48,23 +48,16 @@ def create(folder_input: str, file_output: str):
         continue
     del i
 
+    if os.path.exists(file_output):
+        mode = 'w+'
+        pass
+    else:
+        mode = 'x'
+        pass
     file_jnt: jnt.JNT = jnt.JNT()
-    with io.BytesIO() as io_jnt:
+    with open(file_output, mode=f'{mode}b') as io_jnt:
         file_jnt.write_header(io_jnt)
-        file_jnt.write_entries(io_jnt, directory_listing)
-
-        io_jnt.seek(0)  # reset pos before writing entire file to disk
-        if os.path.exists(file_output):
-            mode = 'w+'
-            pass
-        else:
-            mode = 'x'
-            pass
-        with open(file_output, mode=f'{mode}b') as io_new_jnt:
-            io_new_jnt.write(
-                io_jnt.read()
-            )
-            pass
+        file_jnt.write_entries(io_jnt, folder_input, directory_listing)
         pass
     return
 
@@ -106,9 +99,11 @@ def extract_io(io_input_jnt: typing.BinaryIO, folder_extracted: str):
             pass
 
         if EXTRACT_SUB_FILES and (fp.name.endswith('.JNT')):  # extract sub-JNT files
+            print('WARNING: EXTRACTING SUB FILES IS UNSUPPORTED AND WILL END WITH ERRORS WHEN CREATING!')
+            # TODO Remove this warning message when proper sub file extraction is implemented
             if os.path.exists(fp.name):
                 if os.path.isfile(fp.name):
-                    print(f'Cannot extract file \"{fp}\"!')
+                    print(f'Cannot extract file \"{fp}\"!?')
                     continue
                 pass
             with io.BytesIO(entry.data.read(io_input_jnt, entry.size_padded)) as io_sub_jnt:
@@ -123,7 +118,6 @@ def extract_io(io_input_jnt: typing.BinaryIO, folder_extracted: str):
             else:
                 mode = 'x'
                 pass
-            # TODO UNCOMMENT
             with open(fp, mode=f'{mode}b') as io_entry:
                 size: int = entry.size
                 if USE_PADDED:
@@ -168,11 +162,11 @@ def main():
     arg_parser.add_argument('--input', required=True, type=str)
     arg_parser.add_argument('--output', required=True, type=str)
     args = arg_parser.parse_args()
+
     if args.create and args.extract:
         print('Cannot have both --extract and --create arguments!')
         return
     if args.create:
-        # TODO
         print('Creating...')
         create(args.input, args.output)
         print('Done creating')
