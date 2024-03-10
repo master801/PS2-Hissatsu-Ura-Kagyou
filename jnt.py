@@ -7,6 +7,7 @@ import typing
 import struct
 
 DISC_SECTOR_SIZE: int = 0x800
+PAD_FOR_APACHE2: bool = True
 
 
 @dataclasses.dataclass
@@ -84,10 +85,10 @@ class JNT:
         for i in range(0, len(self.entries)):
             entry = self.entries[i]
             with open(os.path.join(folder_input, entry.name.fp), mode='rb+') as io_entry:
-                seek = io_jnt.tell()
+                entry.data.offset = io_jnt.tell()
                 io_jnt.seek(0x800 + (0x10 * i) + 8)
-                io_jnt.write(struct.pack('<I', seek))
-                io_jnt.seek(seek)
+                io_jnt.write(struct.pack('<I', entry.data.offset))
+                io_jnt.seek(entry.data.offset)
 
                 io_jnt.write(
                     io_entry.read()
@@ -137,8 +138,8 @@ class JNT:
             self.entries[i] = JNT.Entry(
                 size,
                 size_padded,
-                JNT.Entry.Data(0xDEADBEEF),
-                JNT.Entry.Name(0xDEADBEEF, directory_listing[i])
+                JNT.Entry.Data(0xEFBEADDE),
+                JNT.Entry.Name(0xEFBEADDE, directory_listing[i])
             )
 
         for entry in self.entries:
@@ -150,44 +151,44 @@ class JNT:
 
         self.write_directory_listing(io_jnt)
         self.write_datas(io_jnt, folder_input)
+
+        if PAD_FOR_APACHE2:  # pad the file to use in Apache2
+            padded = 0
+            while io_jnt.tell() != 0x58483800:
+                io_jnt.write(b'\x00')
+                padded += 1
+                continue
+            print(f'Wrote {padded} padded bytes for Apache2')
+            del padded
+            pass
         return
 
     # noinspection PyTypeChecker
-    def create_header(self):
-        self.header = JNT.Header(
-            [
-                # always 0x800?
-                JNT.Header.Entry(0, 0x800, None),  # size of header entries
-                JNT.Header.Entry(8, 0x800, None)  # offset to first JNT file data?
-            ]
-        )
+    def create_header(self, _io: typing.BinaryIO):
+        while _io.tell() != 0x800:  # pad header to 0x800
+            _io.write(b'\x00')
+            pass
         return
 
     # noinspection PyComparisonWithNone
     def write_header(self, _io: typing.BinaryIO):
-        if self.header == None:
-            self.create_header()  # generate a dummy header first
-            pass
+        self.header = JNT.Header(
+            [
+                # always 0x800?
+                JNT.Header.Entry(0, 0x800, len(self.entries)),  # size of header entries
+                JNT.Header.Entry(8, 0x800, self.entries[0].data.offset)  # offset to first JNT file data?
+            ]
+        )
 
+        seek = _io.tell()
         for i in self.header.header_entries:
-            size = i.size
-            offset = i.offset
-            if size == None:
-                size = 0xDEADBEEF  # write as placeholder
-                pass
-            if offset == None:
-                offset = 0xDEADBEEF  # write as placeholder
-                pass
-            _io.write(struct.pack('<I', offset))
-            _io.write(struct.pack('<I', size))
-            del offset
-            del size
+            _io.seek(i.pos)
+            _io.write(struct.pack('<I', i.offset))
+            _io.write(struct.pack('<I', i.size))
             continue
         del i
-
-        while _io.tell() != 0x800:  # pad header to 0x800
-            _io.write(b'\x00')
-            pass
+        _io.seek(seek)
+        del seek
         return
 
     # noinspection PyMethodMayBeStatic

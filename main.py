@@ -56,8 +56,9 @@ def create(folder_input: str, file_output: str):
         pass
     file_jnt: jnt.JNT = jnt.JNT()
     with open(file_output, mode=f'{mode}b') as io_jnt:
-        file_jnt.write_header(io_jnt)
+        file_jnt.create_header(io_jnt)
         file_jnt.write_entries(io_jnt, folder_input, directory_listing)
+        file_jnt.write_header(io_jnt)
         pass
     return
 
